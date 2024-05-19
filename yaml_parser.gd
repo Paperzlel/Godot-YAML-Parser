@@ -20,7 +20,7 @@ var current_region : String = ""
 
 # The key before the current one, used to compare whether to start a new dictionary
 # or not.
-var previous_key = ""
+var previous_key : String = ""
 
 # Boolean to check if the file has read the first line or not.
 var has_read_first_line : bool = false
@@ -56,10 +56,10 @@ func parse_key_and_value(line : String) -> PackedStringArray:
 
 
 # Finds the filepath for the given YAML file and parses it into a Dictionary
-func get_and_parse_npc_yaml_file(name : String) -> Dictionary:
+func get_and_parse_yaml_file(name : String) -> Dictionary:
 	# creates a path using a name. This is usually because we expect more than
 	# one file to be used from a given location, so go crazy.
-	var dialogue_filepath = filepath % name
+	var dialogue_filepath : String = filepath % name
 	# If the file doesn't exist we return nothing. Customise if you have any
 	# default options you want.
 	if not FileAccess.file_exists(dialogue_filepath):
@@ -76,7 +76,8 @@ func get_and_parse_npc_yaml_file(name : String) -> Dictionary:
 		var line = file.get_line()
 		var has_value : bool = false
 		
-		# If the line has a # key at the start, it is a comment and we skip it
+		# If the line has a # key at the start, it is a comment and we skip this
+		# iteration of the loop.
 		if line.begins_with("#"):
 			continue
 
@@ -134,7 +135,7 @@ func add_contents_to_dict(line : String, keys : Array, has_value : bool) -> Arra
 			keys_size = keys.size()
 		keys.push_back(key)
 	
-	
+	# Check if the line has a value, then set value and remove whitespace
 	if has_value and len(line_array) > 1:
 		value = line_array[1]
 		value = value.right(-1)
@@ -250,7 +251,28 @@ func add_contents_to_dict(line : String, keys : Array, has_value : bool) -> Arra
 						dict[keys[0]][keys[1]][keys[2]][keys[3]][key].append(value_copy)
 						dict[keys[0]][keys[1]][keys[2]][keys[3]][key].append(value)
 				else:
-					dict[keys[0]][keys[1]][keys[2]][key] = Dictionary()
-	
+					dict[keys[0]][keys[1]][keys[2]][keys[3]][key] = Dictionary()
+		5:
+			if has_value:
+				if previous_key == key:
+					if typeof(dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key]) != TYPE_ARRAY:
+						var value_copy = dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key]
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key] = Array()
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key].append(value_copy)
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key].append(value)
+					else:
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key].append(value)
+				else:
+					dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key] = value
+			else:
+				if previous_key == key:
+					if typeof(dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key]) != TYPE_ARRAY:
+						var value_copy = dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key]
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key] = Array()
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key].append(value_copy)
+						dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key].append(value)
+				else:
+					dict[keys[0]][keys[1]][keys[2]][keys[3]][keys[4]][key] = Dictionary()
+
 	previous_key = key
 	return keys
