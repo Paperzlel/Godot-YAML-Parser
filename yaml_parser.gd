@@ -26,7 +26,7 @@ var previous_key = ""
 var has_read_first_line : bool = false
 
 
-# Class constructor. Add your new filepath (res://<filepath>/%s.yaml) here.
+# Class constructor. Add your new filepath (path/to/file/) here.
 func _init(n_filepath : String):
 	filepath = "res://" + n_filepath + "%s.yaml"
 
