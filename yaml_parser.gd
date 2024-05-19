@@ -28,7 +28,7 @@ var has_read_first_line : bool = false
 
 # Class constructor. Add your new filepath (res://<filepath>/%s.yaml) here.
 func _init(n_filepath : String):
-	filepath = n_filepath
+	filepath = "res://" + n_filepath + "%s.yaml"
 
 
 # Checks if the given line has an indentation in it.
