@@ -46,6 +46,9 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 		## Read the given line
 		var line : Dictionary = _return_line_key_and_value(file)
 		
+		# Check if the line is empty (indicates a comment) and ignore
+		if line.is_empty():
+			continue
 		# Create an object of the line's key and value
 		var object : Dictionary= {"key": line["key"], "value": line["value"]}
 		
