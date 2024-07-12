@@ -48,6 +48,10 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 		## Reads the given line and outputs information about the line
 		var line : Dictionary = _return_line_key_and_value(file)
 		
+		# Create an object of the line's key and value
+		if line.is_empty():
+			continue
+		
 		# Remove all previous entries that are greater than the index size
 		# to prevent the scope being messed up
 		while last_at_index.size() > line["index"] + 1:
@@ -60,9 +64,6 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 			last_at_index.remove_at(line["index"])
 			last_at_index.insert(line["index"], line["key"])
 		
-		# Create an object of the line's key and value
-		if line.is_empty():
-			continue
 		# Create a parent variable to keep track of the possesion of nodes
 		# This is to prevent the recursive function from adding items where
 		# they don't belong.
@@ -128,6 +129,8 @@ func _return_line_key_and_value(file) -> Dictionary:
 	var line_array = _parse_key_and_value(line)
 	var key = line_array[0].dedent()
 	var value
+	if line_array.size() <= 1:
+		return { }
 	if line_array[1] == "":
 		value = null
 	else:
