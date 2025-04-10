@@ -5,41 +5,28 @@ extends Resource
 ## within Godot Engine
 ## All code written by Paperzlel
 
-
-## Filepath to the folder where the YAML files are stored. The code expects to
-## only deal with a single folder, sub-folders and files outside of the folder
-## WILL NOT be accounted for, you will have to change the filepath manually.
-var filepath : Variant = "res://%s.yaml"
-
-## The dictionary that holds all of the parsed values to be used elsewhere. The 
-## parser will only fill this up when the method `get_and_parse_yaml_file` is
-## called. 
-var yaml_dict : Dictionary = { }
-
-## Class constructor for the parser.
-func _init(n_filepath : String):
-	filepath = "res://" + n_filepath + "%s.yaml"
+func _init() -> void:
+	pass
 
 
-## The main function one will use. The parameter `name` will use the given
-## filepath combined with a given name.
-func get_and_parse_yaml_file(name : String) -> Dictionary:
-	# The path to the file to read
-	var dialogue_filepath : String = filepath % name
+## Parses the YAML file found at the given path and turns it into a dictionary.
+## The file found is not cached, nor is its final dictionary, so please ensure
+## that any parsed data is stored appropriately.
+func parse(path : String) -> Dictionary:
 	
 	# If the file doesn't exist return a blank dictionary and print an error.
-	if not FileAccess.file_exists(dialogue_filepath):
-		printerr("File does not exist and the parser is unable to parse, returning a blank dictionary. Please give a valid name for the file.")
+	if not FileAccess.file_exists(path):
+		printerr("Given filepath does not exist.")
 		return { }
 	
-	var file = FileAccess.open(dialogue_filepath, FileAccess.READ)
+	var file : FileAccess = FileAccess.open(path, FileAccess.READ)
 	
 	## Temporary dictionary to store all of the items in as the parser goes along
 	var dict : Dictionary = { }
 	## Current "depth" into the file, or the number of indentations on a line
-	var index = 0
+	var index : int = 0
 	## Dictionary full of arrays of the lines at a given index, pre-parsed
-	var lines_at_index = { }
+	var lines_at_index : Dictionary = { }
 	## List of the last items at the given index
 	var last_at_index : Array = []
 	
@@ -67,7 +54,7 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 		# Create a parent variable to keep track of the possesion of nodes
 		# This is to prevent the recursive function from adding items where
 		# they don't belong.
-		var parent
+		var parent : Variant
 		if line["index"] - 1 < 0:
 			parent = null
 		else:
@@ -75,11 +62,11 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 		
 		## Returns a path that the node takes in the tree, to determine if the
 		## node being used is loading into the correct place
-		var path : String = _get_node_path(last_at_index)
+		var node_path : String = _get_node_path(last_at_index)
 		
 		## Creates all the relevant values to be passed into the dictionary creator
-		var object : Dictionary= {"key": line["key"], "value": line["value"], \
-				"parent": parent, "path" : path}
+		var object : Dictionary = {"key": line["key"], "value": line["value"], \
+				"parent": parent, "path" : node_path}
 		
 		# Check if line at the given index exists so as to not overwrite it
 		if lines_at_index.has(line["index"]):
@@ -90,34 +77,44 @@ func get_and_parse_yaml_file(name : String) -> Dictionary:
 	
 	# Set the dictionary to be formatted into the desired type
 	dict = _format_dict_from_other_r(dict, lines_at_index, index, "", "")
-	
-	# Set the public dictionary to be the same as the private one
-	yaml_dict = dict
+
 	# Return the formatted dictionary as given
 	return dict
 
 
-## Returns the number of indents in a line
+## Returns the number of indentations in a line. Assumes that you are either using tab 
+## indentation or 4-space line indentation. Other forms will not work
 func _get_indent_count(line : String) -> int:
-	var line2 = line.dedent()
+	var line2 : String = line.dedent()
 	if line2 == line:
 		return 0
-	return len(line) - len(line2)
+	var net_length : int = len(line) - len(line2)
+	if line.begins_with(" "):
+		net_length /= 4
+	return net_length
 
 
 ## Separates out a line into its key and value.
 func _parse_key_and_value(line : String) -> PackedStringArray:
 	# Array 0 = key, 1 = value
-	var line_array = line.split(":", true)
+	var line_array : PackedStringArray = line.split(":", true)
+	# Since key-value pairs can be inlined, merge them together for the later tokenizers
+	if line_array.size() > 2:
+		for i in range(line_array.size()):
+			if i < 2:
+				pass
+			else:
+				line_array[1] += ":" + line_array[i]
+	line_array.resize(2)
 	return line_array
 
 
 ## Calculates several values a given line will have for use later on in the pipeline
-func _return_line_key_and_value(file) -> Dictionary:
+func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 	# Get the current line to read from the file
-	var line = file.get_line()
+	var line : String = file.get_line()
 	# Get the indent count from the given line (no. of tab spaces)
-	var index = _get_indent_count(line)
+	var index : int = _get_indent_count(line)
 	# Check for if the file is just the null terminator
 	if len(line) == 0: 
 		return { }
@@ -126,18 +123,74 @@ func _return_line_key_and_value(file) -> Dictionary:
 		return { }
 	line = line.split("#")[0]
 	# Parse out the key and value, and set them as their own variables
-	var line_array = _parse_key_and_value(line)
-	var key = line_array[0].dedent()
-	var value
+	var line_array : PackedStringArray = _parse_key_and_value(line)
+	var key : String = line_array[0].dedent()
+	var value : Variant
 	if line_array.size() <= 1:
 		return { }
 	if line_array[1] == "":
 		value = null
 	else:
-		value = line_array[1].strip_edges()
-	# Return with all the values set NOTE: has_value CAN be removed, but for
-	# the meantime I will keep it
+		var strval : String = line_array[1].strip_edges()
+		value = _string_to_variant(strval)
+	# Return with all the values set
 	return {"index": index, "line_array": line_array, "key": key, "value": value}
+
+
+## Converts the a string into a Variant, if possible. Used for
+## value conversion
+func _string_to_variant(string : String) -> Variant:
+	string = string.strip_edges()
+	if string.contains(".") and string.is_valid_float():
+		return string.to_float()
+	else:
+		if string.is_valid_int():
+			return string.to_int()
+		else:
+			if string == "true":
+				return true
+			elif string == "false":
+				return false
+			else:
+				return _check_if_list(string)
+
+
+## Checks if the given string is a list or dictionary, parsing
+## it if so, otherwise returning it as a String.
+func _check_if_list(string : String) -> Variant:
+	var ret : Variant
+	# Is an array
+	if string.begins_with("[") and string.ends_with("]"):
+		string = string.left(-1)
+		string = string.right(-1)
+		var arr : Array = Array()
+		for substr in string.split(", "):
+			arr.append(_string_to_variant(substr))
+		ret = arr
+	elif string.begins_with("{") and string.ends_with("}"):
+		string = string.left(-1)
+		string = string.right(-1)
+		var dict : Dictionary = Dictionary()
+
+		var key_values : PackedStringArray = string.split(", ")
+		var key_count : int = string.count(":")
+		# Detect an escape by an array or nested dictionary
+		if key_values.size() > key_count:
+			for i in range(key_values.size()):
+				if i < key_count:
+					continue
+				else:
+					key_values[key_count - 1] += ", " + key_values[i]
+		key_values.resize(key_count)
+		for kv in key_values:
+			var kv_arr : PackedStringArray = kv.split(":")
+			dict[kv_arr[0]] = _string_to_variant(kv_arr[1])
+
+		ret = dict
+	else:
+		ret = string
+
+	return ret
 
 
 ## Method that returns the path a node takes from the root to its place in a file
@@ -146,6 +199,7 @@ func _get_node_path(line_index : Array) -> String:
 	for item in line_index:
 		end_str += "/" + item
 	return end_str
+
 
 ## Recursive formatting method, adds all the relevant items into a dictionary.
 func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,  \
@@ -177,23 +231,31 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		if expected_path != item["path"]:
 			continue
 		
+		var value : Variant = item["value"]
+		var is_array_type : bool
+		if end_dict.is_empty() or not end_dict.has(item["key"]):
+			is_array_type = false # Doesn't have a accessible value yet
+		else:
+			is_array_type = typeof(end_dict[item["key"]]) == TYPE_ARRAY
+
 		# Check if item's value is null and the item's name does not yet exist
-		if (item["value"] == null or item["value"] == "") and \
-				not end_dict.has(item["key"]):
+		if value == null and not end_dict.has(item["key"]):
+			
 			end_dict[item["key"]] = Dictionary()
 			end_dict[item["key"]] = _format_dict_from_other_r(end_dict[item["key"]],  \
 					indexed_dict, index + 1, item["key"], expected_path)
 		# Check if item's value is null and the name exists, but is not an array
-		elif (item["value"] == null or item["value"] == "") and \
-				typeof(end_dict[item["key"]]) != TYPE_ARRAY:
-			var saved_item = end_dict[item["key"]]
+		elif value == null and not is_array_type:
+
+			var saved_item : Variant = end_dict[item["key"]]
 			end_dict[item["key"]] = Array()
 			end_dict[item["key"]].append(saved_item)
 			end_dict[item["key"]].append(_format_dict_from_other_r(end_dict[item["key"]], \
 					indexed_dict, index + 1, item["key"], expected_path))
+			
 		# Check if item's value is null and the name exists and is an array
-		elif (item["value"] == null or item["value"] == "") and \
-				typeof(end_dict[item["key"]]) == TYPE_ARRAY:
+		elif value == null and is_array_type:
+
 			var last_index = end_dict[item["key"]].size()
 			end_dict[item["key"]].append(Dictionary())
 			end_dict[item["key"]][last_index] = _format_dict_from_other_r( \
@@ -202,19 +264,19 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		# Item's value is not null
 		else:
 			# Item's name exists, but is not an array
-			if end_dict.has(item["key"]) and \
-					typeof(end_dict[item["key"]]) != TYPE_ARRAY:
-				var saved_item = end_dict[item["key"]]
+			if end_dict.has(item["key"]) and not is_array_type:
+
+				var saved_item : Variant = end_dict[item["key"]]
 				end_dict[item["key"]] = Array()
 				end_dict[item["key"]].append(saved_item)
-				end_dict[item["key"]].append(item["value"])
+				end_dict[item["key"]].append(value)
 			# Item's name exists, and is an array
-			elif end_dict.has(item["key"]) and \
-					typeof(end_dict[item["key"]]) == TYPE_ARRAY:
-				end_dict[item["key"]].append(item["value"])
+			elif end_dict.has(item["key"]) and is_array_type:
+
+				end_dict[item["key"]].append(value)
 			# Item's name does not exist so we can safely assign the item
 			else:
-				end_dict[item["key"]] = item["value"]
+				end_dict[item["key"]] = value
 	# Return once all lines are configured, recusion means deeper dictionaries
 	# will return the same way as the main one
 	return end_dict
