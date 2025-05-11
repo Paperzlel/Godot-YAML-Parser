@@ -113,18 +113,32 @@ func _parse_key_and_value(line : String) -> PackedStringArray:
 func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 	# Get the current line to read from the file
 	var line : String = file.get_line()
+	# Replace any "- " characters for lists with a tab (as it often implies indentation)
+	line = line.replace("- ", "\t")
 	# Get the indent count from the given line (no. of tab spaces)
 	var index : int = _get_indent_count(line)
 	# Check for if the file is just the null terminator
 	if len(line) == 0: 
 		return { }
+	
+	# If the version is specified, ignore it.
+	if line.begins_with("%"):
+		return { }
+	# Check if the line being parsed is the header or footer
+	if line.begins_with("---") or line.begins_with("..."):
+		return { }
+	
 	# Check if the line is a comment or has a comment
 	if line.begins_with("#"):
 		return { }
 	line = line.split("#")[0]
+
 	# Parse out the key and value, and set them as their own variables
 	var line_array : PackedStringArray = _parse_key_and_value(line)
 	var key : String = line_array[0].dedent()
+	if key == "|":
+		printerr("Attempted to use a multiline datatype, which is unsupported.")
+	
 	var value : Variant
 	if line_array.size() <= 1:
 		return { }
@@ -134,7 +148,7 @@ func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 		var strval : String = line_array[1].strip_edges()
 		value = _string_to_variant(strval)
 	# Return with all the values set
-	return {"index": index, "line_array": line_array, "key": key, "value": value}
+	return {"index": index, "key": key, "value": value}
 
 
 ## Converts the a string into a Variant, if possible. Used for
@@ -188,7 +202,12 @@ func _check_if_list(string : String) -> Variant:
 
 		ret = dict
 	else:
-		ret = string
+		if string.begins_with("{") or string.begins_with("["):
+			printerr("Attempted to use a multiline array, which is unsupported.", \
+				"Please use single-line arrays for multiple data types.")
+			ret = null
+		else:
+			ret = string
 
 	return ret
 

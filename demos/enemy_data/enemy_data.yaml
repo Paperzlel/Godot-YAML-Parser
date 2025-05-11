@@ -1,30 +1,34 @@
+%YAML 1.2.0
+---
 goblin:
-    group: Goblin
-    id: 23
-    spawn_region: Caverns
-    types:
-        0:
-            name: Goblin Baby
-            health: 3
-            damage: 1
-            desc: The runt of the group. Does little to no damage.
-        1:
-            name: Goblin Adult
-            health: 30
-            damage: 5
-            desc: An adult goblin. Not as harmful as other enemies, but still dangerous
+	group: Goblin
+	id: 23
+	spawn_region: Caverns
+	types:
+		0:
+			name: Goblin Baby
+			health: 3
+			damage: 1
+			desc: The runt of the group. Does little to no damage.
+		1:
+			name: Goblin Adult
+			health: 30
+			damage: 5
+			desc: An adult goblin. Not as harmful as other enemies, but still dangerous
 spider:
-    group: Spiders
-    id: 3
-    spawn_region: [Swamp, Underworld, Mountain Caves]
-    types:
-        0:
-            name: Ordinary Spider
-            health: 5
-            damage: 2
-            desc: A cute little spider. It still hates you.
-        1:
-            name: Silver Spider
-            health: 500
-            damage: 40
-            desc: The mother of all enemies. Don't even TRY to kill this guy, it won't work out
+# This comment will also be ignored.
+	group: Spiders
+	id: 3
+	spawn_region: [Swamp, Underworld, Mountain Caves] # This comment will be ignored. 
+	types:
+		0:
+			name: Ordinary Spider
+			health: 5
+			damage: 2
+			desc: A cute little spider. It still hates you.
+		1:
+			name: Silver Spider
+			health: 500
+			damage: 40
+			desc: The mother of all enemies. Don't even TRY to kill this guy, it won't work out
+...
