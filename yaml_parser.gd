@@ -5,7 +5,7 @@ extends Resource
 ## within Godot Engine
 ## All code written by Paperzlel
 
-var _data : Dictionary[String, Variant]
+var _data : Dictionary
 
 ## Helper variables to make some of the stuff we pass around less painful
 
@@ -17,13 +17,13 @@ func _init() -> void:
 
 ## Returns the last parsed YAML file in Dictionary format, in case the user 
 ## forgot to format.
-func get_data() -> Dictionary[String, Variant]:
+func get_data() -> Dictionary:
 	return _data
 
 ## Parses the YAML file found at the given path and turns it into a dictionary.
 ## The file found is not cached, nor is its final dictionary, so please ensure
 ## that any parsed data is stored appropriately.
-func parse(path : String) -> Dictionary[String, Variant]:
+func parse(path : String) -> Dictionary:
 	
 	# If the file doesn't exist return a blank dictionary and print an error.
 	if not FileAccess.file_exists(path):
@@ -264,6 +264,8 @@ func _check_if_list(string : String) -> Variant:
 			ret = null
 		else:
 			ret = string.replace("\"", "").strip_edges()
+			if ret.is_empty():
+				ret = null
 
 	return ret
 
@@ -296,6 +298,8 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		if not expected_split_path == item_path:
 			continue
 		
+		expected_path = _get_node_path(item_path)
+		
 		var key : String = item["key"]
 		
 		var value : Variant
@@ -311,7 +315,7 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		else:
 			is_array_type = typeof(end_dict[key]) == TYPE_ARRAY
 
-		# Item's value is not null
+		# Item's value is null
 		if value == null:
 			# Check if item's value is null and the item's name does not yet exist
 			if not end_dict.has(key):
@@ -323,11 +327,14 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 				# Check if item's value is null and the name exists, but is not an array
 				if not is_array_type:
 					var saved_item : Variant = end_dict[key]
+					var last_index : int = 0
 					end_dict[key] = Array()
 					if not _is_variant_nullable(saved_item):
 						end_dict[key].append(saved_item)
+						last_index = 1
+					end_dict[key].append(Dictionary())
 					
-					var n_value : Dictionary = _format_dict_from_other_r(end_dict[key], \
+					var n_value : Dictionary = _format_dict_from_other_r(end_dict[key][last_index], \
 							indexed_dict, index + 1, key, path)
 					end_dict[key].append(n_value)
 				# Check if item's value is null and the name exists and is an array
