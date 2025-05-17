@@ -5,14 +5,25 @@ extends Resource
 ## within Godot Engine
 ## All code written by Paperzlel
 
+var _data : Dictionary[String, Variant]
+
+## Helper variables to make some of the stuff we pass around less painful
+
+## Cache the last used key for when multiline datatypes need to know their key
+var _last_key : String
+
 func _init() -> void:
 	pass
 
+## Returns the last parsed YAML file in Dictionary format, in case the user 
+## forgot to format.
+func get_data() -> Dictionary[String, Variant]:
+	return _data
 
 ## Parses the YAML file found at the given path and turns it into a dictionary.
 ## The file found is not cached, nor is its final dictionary, so please ensure
 ## that any parsed data is stored appropriately.
-func parse(path : String) -> Dictionary:
+func parse(path : String) -> Dictionary[String, Variant]:
 	
 	# If the file doesn't exist return a blank dictionary and print an error.
 	if not FileAccess.file_exists(path):
@@ -39,26 +50,27 @@ func parse(path : String) -> Dictionary:
 		if line.is_empty():
 			continue
 		
+		var line_index : int = line["index"]
 		# Remove all previous entries that are greater than the index size
 		# to prevent the scope being messed up
-		while last_at_index.size() > line["index"] + 1:
-			last_at_index.remove_at(line["index"])
+		while last_at_index.size() > line_index + 1:
+			last_at_index.remove_at(line_index)
 		# Check if the index is greater than the size of the array to determine
 		# if the array needs to have values removed or not before appending
-		if line["index"] > last_at_index.size() - 1:
+		if line_index > last_at_index.size() - 1:
 			last_at_index.append(line["key"])
 		else:
-			last_at_index.remove_at(line["index"])
-			last_at_index.insert(line["index"], line["key"])
+			last_at_index.remove_at(line_index)
+			last_at_index.insert(line_index, line["key"])
 		
 		# Create a parent variable to keep track of the possesion of nodes
 		# This is to prevent the recursive function from adding items where
 		# they don't belong.
 		var parent : Variant
-		if line["index"] - 1 < 0:
+		if line_index - 1 < 0:
 			parent = null
 		else:
-			parent = last_at_index[line["index"] - 1]
+			parent = last_at_index[line_index - 1]
 		
 		## Returns a path that the node takes in the tree, to determine if the
 		## node being used is loading into the correct place
@@ -69,15 +81,17 @@ func parse(path : String) -> Dictionary:
 				"parent": parent, "path" : node_path}
 		
 		# Check if line at the given index exists so as to not overwrite it
-		if lines_at_index.has(line["index"]):
-			lines_at_index[line["index"]].append(object)
+		if lines_at_index.has(line_index):
+			lines_at_index[line_index].append(object)
 		else:
-			lines_at_index[line["index"]] = Array()
-			lines_at_index[line["index"]].append(object)
+			lines_at_index[line_index] = Array()
+			lines_at_index[line_index].append(object)
 	
 	# Set the dictionary to be formatted into the desired type
 	dict = _format_dict_from_other_r(dict, lines_at_index, index, "", "")
 
+
+	_data = dict
 	# Return the formatted dictionary as given
 	return dict
 
@@ -94,18 +108,35 @@ func _get_indent_count(line : String) -> int:
 	return net_length
 
 
+## Method that returns the path a node takes from the root to its place in a file
+func _get_node_path(line_index : Array) -> String:
+	var end_str : String = ""
+	for item in line_index:
+		end_str += "/" + item
+	return end_str
+
+
+## Checks if the value for the item is empty/unused
+func _is_variant_nullable(v : Variant) -> bool:
+	match typeof(v):
+		TYPE_ARRAY:
+			var arr : Array = v
+			return arr.is_empty()
+		TYPE_DICTIONARY:
+			var dict : Dictionary = v
+			return dict.is_empty()
+		TYPE_STRING:
+			var string : String = v
+			return string.is_empty()
+		TYPE_NIL:
+			return true
+	return false
+
 ## Separates out a line into its key and value.
 func _parse_key_and_value(line : String) -> PackedStringArray:
 	# Array 0 = key, 1 = value
-	var line_array : PackedStringArray = line.split(":", true)
-	# Since key-value pairs can be inlined, merge them together for the later tokenizers
-	if line_array.size() > 2:
-		for i in range(line_array.size()):
-			if i < 2:
-				pass
-			else:
-				line_array[1] += ":" + line_array[i]
-	line_array.resize(2)
+	# As it turns out, reading the docs is a good idea.
+	var line_array : PackedStringArray = line.split(":", true, 1)
 	return line_array
 
 
@@ -113,14 +144,10 @@ func _parse_key_and_value(line : String) -> PackedStringArray:
 func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 	# Get the current line to read from the file
 	var line : String = file.get_line()
-	# Replace any "- " characters for lists with a tab (as it often implies indentation)
-	line = line.replace("- ", "\t")
-	# Get the indent count from the given line (no. of tab spaces)
-	var index : int = _get_indent_count(line)
 	# Check for if the file is just the null terminator
 	if len(line) == 0: 
 		return { }
-	
+
 	# If the version is specified, ignore it.
 	if line.begins_with("%"):
 		return { }
@@ -133,22 +160,42 @@ func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 		return { }
 	line = line.split("#")[0]
 
+	# Clear all "- " characters from the string
+	line = line.replace("- ", "\t")
+
 	# Parse out the key and value, and set them as their own variables
 	var line_array : PackedStringArray = _parse_key_and_value(line)
+
 	var key : String = line_array[0].dedent()
-	if key == "|":
-		printerr("Attempted to use a multiline datatype, which is unsupported.")
-	
 	var value : Variant
-	if line_array.size() <= 1:
-		return { }
-	if line_array[1] == "":
-		value = null
-	else:
-		var strval : String = line_array[1].strip_edges()
-		value = _string_to_variant(strval)
+
+	var ofs : int = 0
+
+	# In this case, there is only a value. Set ofs to 1 and remove any
+	# trailing commas
+	if line_array.size() == 1:
+		value = _string_to_variant(key.replace(",", ""))
+		# Only return this if a closed bracket is detected on an end-line.
+		if value == null:
+			return { }
+		ofs = 1
+		key = _last_key
+	else: 
+		# Should usually be the case. Test extensively.
+		_last_key = key
+
+		# Check only when the array has a key-value pair and not just a value
+		if line_array[1] == "":
+			value = null
+		else:
+			var strval : String = line_array[1].strip_edges()
+			value = _string_to_variant(strval)
+
+	# Get the indent count from the given line (no. of tab spaces)
+	var index : int = _get_indent_count(line)
+
 	# Return with all the values set
-	return {"index": index, "key": key, "value": value}
+	return {"index": index - ofs, "key": key, "value": value}
 
 
 ## Converts the a string into a Variant, if possible. Used for
@@ -178,7 +225,13 @@ func _check_if_list(string : String) -> Variant:
 		string = string.left(-1)
 		string = string.right(-1)
 		var arr : Array = Array()
-		for substr in string.split(", "):
+		var split_str : PackedStringArray = string.split(", ", false)
+		for substr in split_str:
+			var index : int = split_str.find(substr)
+			while substr.begins_with("\"") and not substr.ends_with("\""):
+				substr += ", " + split_str[index + 1]
+				split_str.remove_at(index + 1)
+			
 			arr.append(_string_to_variant(substr))
 		ret = arr
 	elif string.begins_with("{") and string.ends_with("}"):
@@ -187,37 +240,32 @@ func _check_if_list(string : String) -> Variant:
 		var dict : Dictionary = Dictionary()
 
 		var key_values : PackedStringArray = string.split(", ")
-		var key_count : int = string.count(":")
-		# Detect an escape by an array or nested dictionary
-		if key_values.size() > key_count:
-			for i in range(key_values.size()):
-				if i < key_count:
-					continue
-				else:
-					key_values[key_count - 1] += ", " + key_values[i]
-		key_values.resize(key_count)
+		# Split by comma, re-order each key-value, split by colon
 		for kv in key_values:
-			var kv_arr : PackedStringArray = kv.split(":")
-			dict[kv_arr[0]] = _string_to_variant(kv_arr[1])
-
+			kv = kv.strip_edges()
+			var quote : int = kv.find("\"")
+			if quote != -1:
+				var subst : String = kv.right(-quote)
+				var pos : int = key_values.find(kv)
+				while subst.begins_with("\"") and not subst.ends_with("\""):
+					subst += ", " + key_values[pos + 1]
+					key_values.remove_at(pos + 1)
+				kv = kv.left(quote) + subst
+			
+			var kv_split : PackedStringArray = kv.split(": ")
+			dict[kv_split[0]] = _string_to_variant(kv_split[1])
 		ret = dict
 	else:
-		if string.begins_with("{") or string.begins_with("["):
-			printerr("Attempted to use a multiline array, which is unsupported.", \
-				"Please use single-line arrays for multiple data types.")
+		if string.begins_with("{"):
+			ret = Dictionary()
+		elif string.begins_with("["):
+			ret = Array()
+		elif string.ends_with("}") or string.ends_with("]"):
 			ret = null
 		else:
-			ret = string
+			ret = string.replace("\"", "").strip_edges()
 
 	return ret
-
-
-## Method that returns the path a node takes from the root to its place in a file
-func _get_node_path(line_index : Array) -> String:
-	var end_str : String = ""
-	for item in line_index:
-		end_str += "/" + item
-	return end_str
 
 
 ## Recursive formatting method, adds all the relevant items into a dictionary.
@@ -225,7 +273,6 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		index : int, parent : String, expected_path : String) -> Dictionary:
 	# Check the index is not larger the the size of the dictionary
 	if index + 1 > indexed_dict.size():
-		printerr("The index is greater than the size of the indexed dictionary!")
 		return { }
 	# Loop through every item at the given index
 	for item in indexed_dict[index]:
@@ -237,65 +284,79 @@ func _format_dict_from_other_r(end_dict : Dictionary, indexed_dict : Dictionary,
 		
 		# Apply the current key to the expected path to ensure it syncs
 		expected_path += "/" + item["key"]
-		## Splits the expected_path into its individual nodes to be removed and
-		## re-assembled into a better expected_path
-		var split_path : Array = Array(expected_path.split("/", false))
-		# Remove all the entries that are not the current item
-		while split_path.size() > index + 1:
-			split_path.remove_at(index)
-		# Re-create the current node path from the split version
-		expected_path = _get_node_path(split_path)
-		# Check if the paths given do not sync together, if they do not the wrong
-		# nodes are being loaded in and should not be added here
-		if expected_path != item["path"]:
+		
+		# Splits the expected path and removed any extra nodes that shouldn't exist.
+		var expected_split_path : Array = Array(expected_path.split("/", false))
+		while expected_split_path.size() > index + 1:
+			expected_split_path.remove_at(index)
+		
+		# Compares the cached path and the expected path. If they aren't the same,
+		# then ignore this item as it's not relevant to the sub-dictionary.
+		var item_path : Array = Array(item["path"].split("/", false))
+		if not expected_split_path == item_path:
 			continue
 		
-		var value : Variant = item["value"]
+		var key : String = item["key"]
+		
+		var value : Variant
+		if not _is_variant_nullable(item["value"]):
+			value = item["value"]
+		else:
+			value = null
+		
+		var path : String = item["path"]
 		var is_array_type : bool
-		if end_dict.is_empty() or not end_dict.has(item["key"]):
+		if end_dict.is_empty() or not end_dict.has(key):
 			is_array_type = false # Doesn't have a accessible value yet
 		else:
-			is_array_type = typeof(end_dict[item["key"]]) == TYPE_ARRAY
+			is_array_type = typeof(end_dict[key]) == TYPE_ARRAY
 
-		# Check if item's value is null and the item's name does not yet exist
-		if value == null and not end_dict.has(item["key"]):
-			
-			end_dict[item["key"]] = Dictionary()
-			end_dict[item["key"]] = _format_dict_from_other_r(end_dict[item["key"]],  \
-					indexed_dict, index + 1, item["key"], expected_path)
-		# Check if item's value is null and the name exists, but is not an array
-		elif value == null and not is_array_type:
-
-			var saved_item : Variant = end_dict[item["key"]]
-			end_dict[item["key"]] = Array()
-			end_dict[item["key"]].append(saved_item)
-			end_dict[item["key"]].append(_format_dict_from_other_r(end_dict[item["key"]], \
-					indexed_dict, index + 1, item["key"], expected_path))
-			
-		# Check if item's value is null and the name exists and is an array
-		elif value == null and is_array_type:
-
-			var last_index = end_dict[item["key"]].size()
-			end_dict[item["key"]].append(Dictionary())
-			end_dict[item["key"]][last_index] = _format_dict_from_other_r( \
-					end_dict[item["key"]][last_index], indexed_dict, index + 1, \
-					item["key"], expected_path)
 		# Item's value is not null
-		else:
-			# Item's name exists, but is not an array
-			if end_dict.has(item["key"]) and not is_array_type:
-
-				var saved_item : Variant = end_dict[item["key"]]
-				end_dict[item["key"]] = Array()
-				end_dict[item["key"]].append(saved_item)
-				end_dict[item["key"]].append(value)
-			# Item's name exists, and is an array
-			elif end_dict.has(item["key"]) and is_array_type:
-
-				end_dict[item["key"]].append(value)
-			# Item's name does not exist so we can safely assign the item
+		if value == null:
+			# Check if item's value is null and the item's name does not yet exist
+			if not end_dict.has(key):
+				end_dict[key] = Dictionary()
+				var n_value : Dictionary = _format_dict_from_other_r(end_dict[key], indexed_dict, 	\
+						index + 1, key, path)
+				end_dict[key] = n_value
 			else:
-				end_dict[item["key"]] = value
+				# Check if item's value is null and the name exists, but is not an array
+				if not is_array_type:
+					var saved_item : Variant = end_dict[key]
+					end_dict[key] = Array()
+					if not _is_variant_nullable(saved_item):
+						end_dict[key].append(saved_item)
+					
+					var n_value : Dictionary = _format_dict_from_other_r(end_dict[key], \
+							indexed_dict, index + 1, key, path)
+					end_dict[key].append(n_value)
+				# Check if item's value is null and the name exists and is an array
+				else:
+					var last_index : int = end_dict[key].size()
+					end_dict[key].append(Dictionary())
+					
+					var n_value : Dictionary = _format_dict_from_other_r(end_dict[key][last_index],	\
+							indexed_dict, index + 1, key, path)
+					end_dict[key][last_index] = n_value
+		# Item is not null
+		else:
+			if not end_dict.has(key):
+				end_dict[key] = value
+			else:
+				# Item's name exists, but is not an array
+				if not is_array_type:
+					var saved_item : Variant = end_dict[key]
+					end_dict[key] = Array()
+					# If the variant is empty/ignorable, we ignore it when re-appending
+					if not _is_variant_nullable(saved_item):
+						end_dict[key].append(saved_item)
+
+					end_dict[key].append(value)
+
+				# Item's name exists, and is an array
+				else:
+					end_dict[key].append(value)
+
 	# Return once all lines are configured, recusion means deeper dictionaries
 	# will return the same way as the main one
 	return end_dict

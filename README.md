@@ -9,7 +9,7 @@ The returned dictionary uses Strings as its keys, and Variants as its values, so
 Currently, there is no way to convert a JSON file or a Godot dictionary into a YAML file, however support for that may exist if needed.
 
 ## Layout
-Currently, the parser supports string values, non-string values, and inlined arrays and dictionaries. More advanced features such as aliases are not supported.
+Currently, the parser supports string values, non-string values, arrays and dictionaries. More advanced features such as aliases are not supported.
 The general layout for a YAML file is as follows:
 ```
 root:
@@ -21,13 +21,33 @@ root:
 		list: [1, 2, 3]
 		inline_dictionary: {name: John Doe, ID: 12345, password: password}
 second_root:
-	string: Hello!		
+	string: Hello!
+	sublist:
+	- thing 1
+	- thing 2
+	- thing 3
+	- thing 4
+	dictionary: {
+		key: value
+		number: 42
+	}
+	sublist_item:
+	- thing a
+	- thing b
+	- thing c
+	- thing d:
+		- another thing
+		- and another thing
+		# NOTE: the above appears as a sublist due to arrays being value-only.
+		# This used to cause an error but has since been removed
+		# since the error is now a feature in this specific instance.
+
 ```
 
-**PLEASE NOTE:** Indentation should be at either 4 spaces per tab, or using regular tabbing amounts, otherwise the parser will get confused and be unable to read the file properly.
+**PLEASE NOTE:** Indentation should be at either 4 spaces per tab, or using raw tabs for indentation, otherwise the parser will get confused and be unable to read the file properly.
 
 ## Examples
 See the `demos` folder for examples on how to use the parser. To see how they work, place the `demos` folder into the root of your project and load the scenes from each of the example files (you may get some UID warnings, these are fine and you can ignore them).
 
 ## Issues
-There are some known issues and non-existent features with the parser - namely no multiline support at the moment. If your issue isn't related to something unrelated to YAML feature support, please open an issue on this repository to let me know of any potential problems.
+There are some known issues and non-existent features with the parser. If your issue isn't related to something unrelated to YAML feature support, please open an issue on this repository to let me know of any potential problems.
