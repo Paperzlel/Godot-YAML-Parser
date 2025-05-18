@@ -174,7 +174,7 @@ func _return_line_key_and_value(file : FileAccess) -> Dictionary:
 	# In this case, there is only a value. Set ofs to 1 and remove any
 	# trailing commas
 	if line_array.size() == 1:
-		value = _string_to_variant(key.replace(",", ""))
+		value = _string_to_variant(key)
 		# Only return this if a closed bracket is detected on an end-line.
 		if value == null:
 			return { }
